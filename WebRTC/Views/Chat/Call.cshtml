@@ -1,0 +1,156 @@
+﻿<button id="Connect" disabled>Connect</button>
+<input id="Message" />
+<button id="Send" disabled>Send Message</button>
+
+
+<script>
+
+
+
+    var connection = new signalR.HubConnectionBuilder().withUrl("/Signal").build();
+    var connectButton = document.querySelector("#Connect")
+    var messageInput = document.querySelector("#Message")
+    var sendButton = document.querySelector("#Send")
+    var connectionAttempted = false
+    var localOffer = null
+    var localAnswer = null
+    var remoteIce = []
+    var localIce = []
+    connection
+    .start()
+    .then(function () 
+    {
+        connection.on("CallerRequest", IAmTheCallee)
+        connectButton.disabled = false
+        connectButton.addEventListener("click", IAmTheCaller)
+    })
+    .catch(function (err) 
+    {
+        return console.error(err.toString());
+    });
+
+
+
+
+
+
+
+
+    async function IAmTheCaller(node)
+    {
+        var callerPeerConnection = new RTCPeerConnection()
+        var callerChannel = callerPeerConnection.createDataChannel("RealChannel")
+        callerChannel.onopen = handleSendChannelStatusChange;
+        callerChannel.onclose = handleSendChannelStatusChange;
+        callerChannel.onmessage = handleReceiveMessage
+        callerPeerConnection.onicecandidate = OnCallerLocalIce
+        localOffer = await callerPeerConnection.createOffer()
+        await callerPeerConnection.setLocalDescription(localOffer)
+        localOffer = callerPeerConnection.localDescription
+        connection.on("CalleeAnswer", async (answer)=>
+        {
+            await callerPeerConnection.setRemoteDescription(answer.answer)
+            callerPeerConnection.addIceCandidate(answer.ice)
+            console.log("Caller is ready...")
+        })
+        sendButton.addEventListener("click", (node)=>
+        {
+            callerChannel.send(messageInput.value)
+        })
+    }
+
+
+
+
+
+
+    async function IAmTheCallee(request)
+    {
+        var calleePeerConnection = new RTCPeerConnection()
+        var calleeChannel = calleePeerConnection.createDataChannel("calleeChannel")
+        calleePeerConnection.ondatachannel = (event) =>
+        {
+            calleeChannel = event.channel;
+            calleeChannel.onmessage = handleReceiveMessage;
+            calleeChannel.onopen = handleReceiveChannelStatusChange;
+            calleeChannel.onclose = handleReceiveChannelStatusChange;
+        }
+        calleePeerConnection.onicecandidate = OnCalleeLocalIce
+        await calleePeerConnection.setRemoteDescription(request.offer)
+        localAnswer = await calleePeerConnection.createAnswer()
+        await calleePeerConnection.setLocalDescription(localAnswer)
+        localAnswer = calleePeerConnection.localDescription
+        calleePeerConnection.addIceCandidate(request.ice)
+        sendButton.addEventListener("click", (node) => 
+        {
+            calleeChannel.send(messageInput.value)
+        })
+    }
+
+
+
+
+    function OnCallerLocalIce(e)
+    {
+        localIce.push(e.candidate)
+        if(!connectionAttempted)
+        {
+            connectionAttempted = true
+            connection.invoke("CallerRequest", { offer: localOffer, ice: e.candidate })
+            console.log("Callee is ready...")
+        }
+    }
+    function OnCalleeLocalIce(e)
+    {
+        localIce.push(e.candidate)
+        if(!connectionAttempted)
+        {
+            connectionAttempted = true
+            connection.invoke("CalleeAnswer", { answer: localAnswer, ice: e.candidate })
+        }
+    }
+    function handleReceiveChannelStatusChange(event) {
+        console.log("Channel status has changed.")
+        sendButton.disabled = false
+        // Here you would do stuff that needs to be done
+        // when the channel's status changes.
+    }
+    function handleSendChannelStatusChange(event)
+    {
+            if (event.type === "open") 
+            {
+                sendButton.disabled = false
+            } 
+            else 
+            {
+                
+            }
+    }
+    function handleReceiveMessage(e)
+    {
+        alert(e.data)
+    }
+    function disconnectPeers() {
+
+        // Close the RTCDataChannels if they're open.
+        sendChannel.close();
+        receiveChannel.close();
+
+        // Close the RTCPeerConnections
+        localConnection.close();
+        remoteConnection.close();
+        sendChannel = null;
+        receiveChannel = null;
+        localConnection = null;
+        remoteConnection = null;
+
+        // Update user interface elements
+
+        connectButton.disabled = false;
+        disconnectButton.disabled = true;
+        sendButton.disabled = true;
+
+        messageInputBox.value = "";
+        messageInputBox.disabled = true;
+    }
+</script>

@@ -1,0 +1,97 @@
+﻿<h1>Welcome to your P2P chat room!</h1>
+
+<script>
+    var connection = new signalR.HubConnectionBuilder().withUrl("/Signal").build();
+
+    connection
+        .start()
+        .then(function () {
+
+        })
+        .catch(function (err) {
+            return console.error(err.toString());
+        });
+
+    // Initialize variables
+    let remoteStream;
+    let peerConnection;
+
+    // Function to handle the received offer
+    async function handleOffer(offer) {
+        try {
+            // Create RTCPeerConnection
+            console.log("Offer started", offer)
+            peerConnection = new RTCPeerConnection();
+
+            // Configure the peer connection event handlers
+            peerConnection.addEventListener('icecandidate', handleIceCandidate);
+            peerConnection.addEventListener('track', handleTrack);
+            // Create and send an answer
+           
+            // Set remote session description (the received offer)
+            await peerConnection.setRemoteDescription(offer.offer);
+
+            // Get local media stream
+            const localStream = await navigator.mediaDevices.getUserMedia({ video: true });
+
+            // Display local video stream on receiver's side
+            //const localVideoElement = document.getElementById('localVideo');
+            //localVideoElement.srcObject = localStream;
+
+            // Add local stream to the peer connection
+            localStream.getTracks().forEach(track => peerConnection.addTrack(track, localStream));
+
+            
+
+            // Send the answer to the caller via signaling mechanism
+            // Send the answer as JSON object or in any desired format to the caller
+            signalingSendAnswer(answer);
+        } catch (error) {
+            console.error('Failed to handle offer:', error);
+        }
+    }
+
+
+    function signalingSendAnswer(answer)
+    {
+        connection.invoke("Answer", { answer : answer })
+    }
+
+
+    // Function to handle ICE candidates
+    function handleIceCandidate(event) 
+    {
+        if (event.candidate) {
+            // Send the ICE candidate to the caller via signaling mechanism
+            // Send the ICE candidate as JSON object or in any desired format to the caller
+            signalingSendIceCandidate(event.candidate);
+        }
+    }
+
+    function signalingSendIceCandidate(candidate)
+    {
+        connection.invoke("IceCandidate", { candidate: candidate })
+    }
+
+    // Function to handle received tracks
+    function handleTrack(event) {
+        // Get the remote media stream
+        remoteStream = event.streams[0];
+
+        // Display remote video stream on receiver's side
+        const remoteVideoElement = document.getElementById('remoteVideo');
+        remoteVideoElement.srcObject = remoteStream;
+    }
+
+
+    // Configure the signaling mechanism to receive offers, answers, and ICE candidates
+    // Handle the received signaling messages appropriately by calling the corresponding functions
+    connection.on("Offer", handleOffer);
+    connection.on("IceCandidate", (candidate)=>
+    {
+        console.log(candidate)
+        peerConnection.addIceCandidate(candidate.candidate)
+        console.log("Ice Added in receiver")
+    });
+
+</script>
